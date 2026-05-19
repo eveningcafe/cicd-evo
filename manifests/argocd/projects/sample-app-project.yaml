@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: sample-app
+  namespace: argocd
+spec:
+  description: Demo project for the cicd-evolution sample app
+  sourceRepos:
+    - https://github.com/example-org/cicd-evolution-demo.git
+  destinations:
+    - namespace: sample-app-dev
+      server: https://kubernetes.default.svc
+    - namespace: sample-app-staging
+      server: https://kubernetes.default.svc
+    - namespace: sample-app-prod
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

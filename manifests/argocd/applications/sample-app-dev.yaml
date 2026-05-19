@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sample-app-dev
+  namespace: argocd
+  annotations:
+    # Argo CD Image Updater config. Note `write-back-method: git` — this is
+    # the correct setup described in Phần IV §4.3. The anti-pattern is to
+    # use `write-back-method: argocd`, which makes the cluster itself a
+    # source of truth alongside Git.
+    argocd-image-updater.argoproj.io/image-list: app=ghcr.io/example-org/sample-app
+    argocd-image-updater.argoproj.io/app.update-strategy: digest
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-branch: main
+spec:
+  project: sample-app
+  source:
+    repoURL: https://github.com/example-org/cicd-evolution-demo.git
+    targetRevision: main
+    path: manifests/apps/sample-app/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sample-app-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

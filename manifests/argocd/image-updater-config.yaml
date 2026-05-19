@@ -1,0 +1,16 @@
+# ConfigMap consumed by argocd-image-updater. The interesting field is
+# `git.user`/`git.email` — every image bump becomes a real Git commit, which
+# is the *only* difference between a healthy GitOps setup and the
+# "two sources of truth" anti-pattern from Phần IV §4.2.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-image-updater-config
+  namespace: argocd
+data:
+  log.level: info
+  git.user: argocd-image-updater
+  git.email: argocd-image-updater@example.org
+  # Default write-back. Per-Application annotations can override, but the
+  # platform default should always be `git`, never `argocd`.
+  argocd.write-back-method: git

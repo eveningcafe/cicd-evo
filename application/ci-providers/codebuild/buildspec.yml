@@ -1,0 +1,15 @@
+# Thin CI on AWS CodeBuild.
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password | docker login --password-stdin "$IMAGE_REGISTRY"
+  build:
+    commands:
+      - ./application/scripts/test.sh
+      - ./application/scripts/build.sh
+      - docker push "$(cat application/.build/image)"
+  post_build:
+    commands:
+      - ./application/scripts/deploy.sh dev

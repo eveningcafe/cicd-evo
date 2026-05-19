@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sample-app-dev
+
+resources:
+  - ../../base
+
+patches:
+  - path: replicas-patch.yaml
+    target:
+      kind: Deployment
+      name: sample-app
+  - path: env-patch.yaml
+    target:
+      kind: Deployment
+      name: sample-app
+
+# `deploy.sh dev` rewrites the newTag below.
+# This is the single source of truth Argo CD watches.
+images:
+  - name: ghcr.io/example-org/sample-app
+    newTag: placeholder

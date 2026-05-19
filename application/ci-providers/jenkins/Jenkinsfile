@@ -1,0 +1,26 @@
+// Thin CI on Jenkins. The pipeline is a sequence of `sh` calls into the same
+// scripts that GitHub Actions and GitLab CI invoke. Switching CI providers
+// touches this file only — never scripts/.
+pipeline {
+  agent any
+  options { timestamps() }
+
+  stages {
+    stage('test')   { steps { sh './application/scripts/test.sh' } }
+    stage('build')  { steps { sh './application/scripts/build.sh' } }
+    stage('push')   {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'registry',
+                                         usernameVariable: 'U',
+                                         passwordVariable: 'P')]) {
+          sh 'echo "$P" | docker login -u "$U" --password-stdin ghcr.io'
+          sh 'docker push "$(cat application/.build/image)"'
+        }
+      }
+    }
+    stage('deploy-dev') {
+      when { branch 'main' }
+      steps { sh './application/scripts/deploy.sh dev' }
+    }
+  }
+}

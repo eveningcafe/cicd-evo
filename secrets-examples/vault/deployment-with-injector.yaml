@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sample-app
+  namespace: sample-app-prod
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-app
+  namespace: sample-app-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sample-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sample-app
+      annotations:
+        # ---- Vault Agent Injector configuration ----
+        # The injector watches for these annotations and mutates the pod
+        # spec at admission time. The app itself doesn't talk to Vault.
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: sample-app
+        # Render database credentials produced by the `database/` secret
+        # engine. Each pod gets its own short-lived DB user.
+        vault.hashicorp.com/agent-inject-secret-db.env: database/creds/sample-app
+        vault.hashicorp.com/agent-inject-template-db.env: |
+          {{- with secret "database/creds/sample-app" -}}
+          DATABASE_USERNAME={{ .Data.username }}
+          DATABASE_PASSWORD={{ .Data.password }}
+          {{- end }}
+        # Static API key from KV v2 — illustrates that not everything
+        # needs to be dynamic.
+        vault.hashicorp.com/agent-inject-secret-api.env: kv/data/sample-app/api
+        vault.hashicorp.com/agent-inject-template-api.env: |
+          {{- with secret "kv/data/sample-app/api" -}}
+          API_KEY={{ .Data.data.key }}
+          {{- end }}
+    spec:
+      serviceAccountName: sample-app
+      containers:
+        - name: sample-app
+          image: ghcr.io/example-org/sample-app:placeholder
+          command:
+            - sh
+            - -c
+            - |
+              set -a
+              . /vault/secrets/db.env
+              . /vault/secrets/api.env
+              set +a
+              exec gunicorn --bind 0.0.0.0:8080 --workers 2 app:app
+          ports:
+            - name: http
+              containerPort: 8080

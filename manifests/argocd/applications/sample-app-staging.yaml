@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sample-app-staging
+  namespace: argocd
+spec:
+  project: sample-app
+  source:
+    repoURL: https://github.com/example-org/cicd-evolution-demo.git
+    targetRevision: main
+    path: manifests/apps/sample-app/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sample-app-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

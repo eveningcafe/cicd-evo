@@ -1,0 +1,38 @@
+# Thin CI on GitHub Actions.
+#
+# The CI provider is responsible for the boundary concerns only:
+#   - trigger (push/PR/tag)
+#   - credentials (OIDC into the registry)
+#   - runner provisioning
+#   - notifications (handled by the platform)
+#
+# All build/test/deploy logic lives in scripts/ and runs identically on
+# a developer laptop. The whole "vendor lock-in" attack surface fits in
+# this file.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: ./application/scripts/test.sh
+      - run: ./application/scripts/build.sh
+      - run: docker push "$(cat application/.build/image)"
+      - if: github.ref == 'refs/heads/main'
+        run: ./application/scripts/deploy.sh dev

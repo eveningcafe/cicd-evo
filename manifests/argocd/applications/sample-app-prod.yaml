@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sample-app-prod
+  namespace: argocd
+spec:
+  project: sample-app
+  source:
+    repoURL: https://github.com/example-org/cicd-evolution-demo.git
+    targetRevision: main
+    path: manifests/apps/sample-app/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sample-app-prod
+  # Production stays manual — Phần II §2.1. A human promotes a tag from
+  # staging to prod by opening a PR against the prod overlay.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
