@@ -34,16 +34,16 @@ phases:
       - echo "=== Packaging deploy bundle ==="
       - mkdir -p deploy-bundle/app deploy-bundle/scripts
       - cp -r application/src/* deploy-bundle/app/
-      - cp aws-codepipeline/appspec/appspec.yml deploy-bundle/appspec.yml
-      - cp aws-codepipeline/appspec/sample-app.service deploy-bundle/sample-app.service
-      - cp -r aws-codepipeline/appspec/scripts/* deploy-bundle/scripts/
+      - cp aws-codepipeline-full/appspec/appspec.yml deploy-bundle/appspec.yml
+      - cp aws-codepipeline-full/appspec/sample-app.service deploy-bundle/sample-app.service
+      - cp -r aws-codepipeline-full/appspec/scripts/* deploy-bundle/scripts/
       - chmod +x deploy-bundle/scripts/*.sh
       - echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" > deploy-bundle/app/VERSION
 
       # Bundle the later-stage buildspecs so stages 3 + 5 can consume them
       # directly from the build artifact (no second source checkout needed).
-      - cp aws-codepipeline/buildspecs/contract-test.yml deploy-bundle/contract-test.yml
-      - cp aws-codepipeline/buildspecs/integration-test.yml deploy-bundle/integration-test.yml
+      - cp aws-codepipeline-full/buildspecs/contract-test.yml deploy-bundle/contract-test.yml
+      - cp aws-codepipeline-full/buildspecs/integration-test.yml deploy-bundle/integration-test.yml
 
   post_build:
     commands:

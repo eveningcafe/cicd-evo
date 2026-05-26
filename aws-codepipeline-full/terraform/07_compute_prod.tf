@@ -28,6 +28,24 @@ resource "aws_lb_target_group" "blue" {
   }
 }
 
+# Green target group — empty until a Blue/Green deploy creates the green ASG.
+resource "aws_lb_target_group" "green" {
+  name        = "${local.name}-green"
+  vpc_id      = data.aws_vpc.main.id
+  port        = 8080
+  protocol    = "HTTP"
+  target_type = "instance"
+
+  health_check {
+    path                = "/healthz"
+    matcher             = "200"
+    interval            = 15
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+}
+
 resource "aws_lb_listener" "prod" {
   load_balancer_arn = aws_lb.prod.arn
   port              = 80

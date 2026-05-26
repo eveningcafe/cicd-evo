@@ -10,7 +10,7 @@ The simplest possible pipeline that still uses all 3 AWS CI/CD services:
 
 No ALB, no ASG, no Blue/Green, no staging/prod split, no manual approval, no integration test. Just **Source → Build → Deploy**. ~12 AWS resources total.
 
-For the full production-style demo (6 stages, ALB, ASG×2, traffic control, manual approval, integration tests in VPC), see `../aws-codepipeline/`.
+For the full production-style demo (6 stages, ALB, ASG×2, traffic control, manual approval, integration tests in VPC), see `../aws-codepipeline-full/`.
 
 ## What it deploys
 

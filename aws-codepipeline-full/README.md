@@ -1,6 +1,6 @@
-# AWS CodePipeline 6-Stage Demo
+# AWS CodePipeline Full Demo (6 stages)
 
-Hands-on demo of an AWS-native CI/CD pipeline using **GitHub → CodeBuild → CodeDeploy → CodePipeline** on **EC2** with **Terraform** as IaC. Deploys the Flask app at `../application/src/app.py` to a staging ASG (in-place) and a production ASG behind an ALB (in-place rolling with traffic control).
+Hands-on demo of an AWS-native CI/CD pipeline using **GitHub → CodeBuild → CodeDeploy → CodePipeline** on **EC2** with **Terraform** as IaC. Deploys the Flask app at `../application/src/app.py` to a staging ASG (in-place) and a production ASG behind an ALB (**Blue/Green** via target-group swap).
 
 ## System architecture
 
@@ -24,9 +24,9 @@ Hands-on demo of an AWS-native CI/CD pipeline using **GitHub → CodeBuild → C
               pytest +        test.yml        "staging"        test.yml           deploy-group
               package zip     pip check,      IN_PLACE         curl staging       "prod"
                               compileall      to staging       /healthz,/        IN_PLACE w/
-                                              ASG (1x)         (in-VPC)          traffic ctrl
-                                                                                 on prod ASG
-                                                                                 (2x) behind ALB
+                                              ASG (1x)         (in-VPC)          BLUE_GREEN
+                                                                                 over ALB
+                                                                                 (blue↔green TG)
 ```
 
 ### Runtime topology (after deploy)
@@ -117,13 +117,13 @@ Out-of-VPC (region-scoped) AWS services:
 | 3 | **Test**       | CodeBuild             | Static / contract checks (`python -m compileall`, `pip check`, schema asserts)  |
 | 4 | **Staging**    | CodeDeploy (IN_PLACE) | Deploy to staging ASG (1 × t3.micro). Lifecycle hooks install deps + systemd start |
 | 5 | **IntegrationTest** | CodeBuild        | Resolves staging instance IP, curls `/healthz`, `/readyz`, `/`. Fails on non-200 |
-| 6 | **Production** | Manual approval → CodeDeploy (IN_PLACE with traffic control) | Human gate, then rolling deploy on the prod ASG, draining + re-registering via the ALB target group |
+| 6 | **Production** | Manual approval → CodeDeploy (BLUE_GREEN over ALB) | Human gate, then CodeDeploy launches a green ASG from the same launch template, validates, flips ALB listener blue → green, terminates blue after 5 min |
 
 > **Why Test runs both before and after Staging?** Pre-deploy "Test" (stage 3) catches issues without spinning up infrastructure — fast and cheap. Post-deploy "IntegrationTest" (stage 5) catches issues only visible against a running service — config drift, missing env vars, network misroutes. Real teams do both.
 
 > **⚠ Manual step required:** After `terraform apply`, the GitHub CodeConnection is `PENDING`. Open AWS Console → Developer Tools → Settings → Connections → `cicd-evo-github` → **Update pending connection** → authorize via GitHub OAuth. Pipeline will not trigger until status is `AVAILABLE`.
 
-> **Why in-place instead of Blue/Green for prod?** Terraform AWS provider 5.x rejects the `target_group_pair_info` block needed for ALB-based Blue/Green (`InvalidLoadBalancerInfoException`). The in-place + traffic-control pattern still demonstrates: ALB target group draining, lifecycle hook deploys, auto-rollback on validate failure.
+> **Blue/Green via CLI workaround:** Terraform AWS provider 5.x has a serialization bug for `load_balancer_info { target_group_pair_info }` on Blue/Green deployment groups — the AWS API returns `InvalidLoadBalancerInfoException`. The fix in `terraform/08_deploy_codedeploy.tf` is to create the DG without `load_balancer_info` then patch it with `aws deploy update-deployment-group` in a `null_resource`. From there on, Blue/Green works normally (CodeDeploy spins up a green ASG, validates, flips the listener).
 
 ## Prerequisites
 
@@ -159,7 +159,7 @@ The subnets must already route to an Internet Gateway (the default VPC's subnets
 Convenience scripts under `scripts/` exist, but the steps below are the underlying commands. Run them by hand to see what each tool does.
 
 ```bash
-cd aws-codepipeline/terraform
+cd aws-codepipeline-full/terraform
 
 # (1) sanity
 aws sts get-caller-identity
@@ -200,7 +200,7 @@ aws codepipeline put-approval-result --pipeline-name "$PIPELINE" --region "$REGI
   --stage-name Production --action-name ApproveProd \
   --token "$TOKEN" --result summary=ok,status=Approved
 
-# (8) verify prod once in-place rolling finishes
+# (8) verify prod once Blue/Green finishes (~5–8 min)
 ALB=$(terraform output -raw prod_alb_dns)
 curl "http://$ALB/"
 
@@ -212,7 +212,7 @@ terraform destroy -auto-approve
 
 ## What gets created
 
-~30 resources in the existing VPC: 4 IAM roles · 1 S3 artifacts bucket · 1 CodeConnections connection (GitHub) · 3 CodeBuild projects · 2 EC2 launch templates · 2 Auto Scaling Groups (staging=1, prod=2) · 1 ALB + 1 target group · 1 listener · 3 security groups · 1 CodeDeploy application + 2 deployment groups · 1 CodePipeline.
+~32 resources in the existing VPC: 4 IAM roles · 1 S3 artifacts bucket · 1 CodeConnections connection (GitHub) · 3 CodeBuild projects · 2 EC2 launch templates · 2 Auto Scaling Groups (staging=1, prod=2; CodeDeploy clones the prod ASG at deploy time for green) · 1 ALB + 2 target groups (blue, green) · 1 listener · 4 security groups · 1 CodeDeploy application + 2 deployment groups · 1 CodePipeline · 1 null_resource (Blue/Green CLI patch).
 
 > No VPC/subnets/IGW are created — those are reused from your existing network.
 
