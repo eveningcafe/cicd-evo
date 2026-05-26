@@ -1,0 +1,68 @@
+# Stage 5: IntegrationTest (post-staging)
+# Runs AFTER CodeDeploy has finished deploying to the staging ASG.
+# Discovers the staging instance by EC2 tag, then curls real HTTP endpoints.
+#
+# Required env vars (injected by the Terraform CodeBuild project):
+#   PROJECT_NAME       — used to filter EC2 instances by tag
+#   STAGING_PORT       — app port (default 8080)
+version: 0.2
+
+env:
+  variables:
+    STAGING_PORT: "8080"
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - yum install -y jq || apt-get install -y jq
+
+  build:
+    commands:
+      - echo "=== Discovering staging instance ==="
+      - |
+        IP=$(aws ec2 describe-instances \
+          --filters "Name=tag:Project,Values=${PROJECT_NAME}" \
+                    "Name=tag:Environment,Values=staging" \
+                    "Name=instance-state-name,Values=running" \
+          --query "Reservations[].Instances[0].PublicIpAddress" \
+          --output text)
+        if [ -z "$IP" ] || [ "$IP" = "None" ]; then
+          echo "No running staging instance found"
+          exit 1
+        fi
+        echo "Staging IP: $IP"
+        echo "STAGING_IP=$IP" >> ip.env
+
+      - . ./ip.env
+
+      - echo "=== Waiting for app to respond (60s budget) ==="
+      - |
+        for i in $(seq 1 30); do
+          if curl -fsS --max-time 2 "http://${STAGING_IP}:${STAGING_PORT}/healthz" >/dev/null; then
+            echo "App is up after ${i} attempts"
+            break
+          fi
+          sleep 2
+        done
+
+      - echo "=== /healthz returns 200 + {status:ok} ==="
+      - |
+        BODY=$(curl -fsS "http://${STAGING_IP}:${STAGING_PORT}/healthz")
+        echo "$BODY"
+        echo "$BODY" | jq -e '.status == "ok"' >/dev/null
+
+      - echo "=== /readyz returns 200 + {status:ready} ==="
+      - |
+        BODY=$(curl -fsS "http://${STAGING_IP}:${STAGING_PORT}/readyz")
+        echo "$BODY"
+        echo "$BODY" | jq -e '.status == "ready"' >/dev/null
+
+      - echo "=== / returns expected JSON shape ==="
+      - |
+        BODY=$(curl -fsS "http://${STAGING_IP}:${STAGING_PORT}/")
+        echo "$BODY"
+        echo "$BODY" | jq -e '.message and .environment and .version and .host' >/dev/null
+
+      - echo "=== All integration tests passed ==="

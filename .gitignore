@@ -14,3 +14,11 @@ application/.build/
 .idea/
 .vscode/
 *.swp
+
+# Terraform (aws-codepipeline demo)
+aws-codepipeline/terraform/.terraform/
+aws-codepipeline/terraform/.terraform.lock.hcl
+aws-codepipeline/terraform/*.tfstate
+aws-codepipeline/terraform/*.tfstate.*
+aws-codepipeline/terraform/terraform.tfvars
+aws-codepipeline/terraform/tfplan

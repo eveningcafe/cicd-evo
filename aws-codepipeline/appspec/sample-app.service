@@ -1,0 +1,18 @@
+[Unit]
+Description=Sample Flask app (CodePipeline demo)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/opt/sample-app/app
+Environment=APP_ENVIRONMENT=ec2
+Environment=PORT=8080
+EnvironmentFile=-/opt/sample-app/app.env
+ExecStart=/opt/sample-app/venv/bin/gunicorn -w 2 -b 0.0.0.0:8080 app:app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

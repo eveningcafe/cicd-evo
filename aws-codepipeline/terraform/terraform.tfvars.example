@@ -1,0 +1,19 @@
+region        = "ap-southeast-1"
+project_name  = "cicd-evo"
+instance_type = "t3.micro"
+
+# Existing VPC + subnets (≥2 AZs needed for the ALB).
+vpc_id     = "vpc-036b914bdf14d227e"
+subnet_ids = [
+  "subnet-0c51b6b97f99b69ed",
+  "subnet-095f2eb89045eb289",
+]
+
+# GitHub repo to pull source from. Must already exist on GitHub.
+# After `terraform apply`, manually authorize the connection in AWS Console.
+github_repo = "eveningcafe/cicd-evo"
+branch_name = "main"
+
+tags = {
+  Owner = "your-name"
+}

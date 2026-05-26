@@ -1,0 +1,44 @@
+# Stage 3: Test (pre-deploy)
+# Cheap, fast static / contract checks against the build artifact.
+# Runs BEFORE anything is deployed. Catches obvious issues without spinning
+# up infrastructure.
+#
+# Examples in this demo:
+#   - python -m compileall to confirm syntax compiles
+#   - pip check to confirm declared deps resolve
+#   - assert appspec.yml + sample-app.service + scripts/ are present
+#
+# Real teams expand this with: API schema validation, SAST scans, license
+# checks, container scans, etc.
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - python -m pip install --upgrade pip
+      - pip install -r app/requirements.txt
+      - pip install pyyaml
+
+  build:
+    commands:
+      - echo "=== Static syntax check ==="
+      - python -m compileall -q app/
+
+      - echo "=== Dependency resolution check ==="
+      - pip check
+
+      - echo "=== Deploy bundle shape check ==="
+      - test -f appspec.yml             || (echo "missing appspec.yml" && exit 1)
+      - test -f sample-app.service      || (echo "missing systemd unit"  && exit 1)
+      - test -x scripts/before_install.sh
+      - test -x scripts/after_install.sh
+      - test -x scripts/application_start.sh
+      - test -x scripts/application_stop.sh
+      - test -x scripts/validate_service.sh
+
+      - echo "=== appspec.yml is valid YAML ==="
+      - python -c "import yaml; yaml.safe_load(open('appspec.yml'))"
+
+      - echo "=== All contract tests passed ==="

@@ -1,0 +1,58 @@
+# Stage 2: Build
+# - Install pip deps
+# - Run unit tests (pytest)
+# - Package application/src + appspec into a zip CodeDeploy can consume
+#
+# Inputs:  source artifact = full repo (from CodeCommit or S3 source)
+# Outputs: build artifact = deploy bundle for CodeDeploy
+version: 0.2
+
+env:
+  variables:
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    PYTHONDONTWRITEBYTECODE: "1"
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - python -m pip install --upgrade pip
+      - pip install pytest
+      - pip install -r application/src/requirements.txt
+
+  pre_build:
+    commands:
+      - echo "Build started on $(date)"
+      - echo "Commit -- $CODEBUILD_RESOLVED_SOURCE_VERSION"
+
+  build:
+    commands:
+      - echo "=== Running unit tests ==="
+      - pytest application/tests -v
+
+      - echo "=== Packaging deploy bundle ==="
+      - mkdir -p deploy-bundle/app deploy-bundle/scripts
+      - cp -r application/src/* deploy-bundle/app/
+      - cp aws-codepipeline/appspec/appspec.yml deploy-bundle/appspec.yml
+      - cp aws-codepipeline/appspec/sample-app.service deploy-bundle/sample-app.service
+      - cp -r aws-codepipeline/appspec/scripts/* deploy-bundle/scripts/
+      - chmod +x deploy-bundle/scripts/*.sh
+      - echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" > deploy-bundle/app/VERSION
+
+      # Bundle the later-stage buildspecs so stages 3 + 5 can consume them
+      # directly from the build artifact (no second source checkout needed).
+      - cp aws-codepipeline/buildspecs/contract-test.yml deploy-bundle/contract-test.yml
+      - cp aws-codepipeline/buildspecs/integration-test.yml deploy-bundle/integration-test.yml
+
+  post_build:
+    commands:
+      - echo "Build finished on $(date)"
+      - ls -la deploy-bundle/
+
+# CodePipeline picks up everything listed here as the output artifact.
+artifacts:
+  base-directory: deploy-bundle
+  files:
+    - "**/*"
+  name: deploy-bundle
