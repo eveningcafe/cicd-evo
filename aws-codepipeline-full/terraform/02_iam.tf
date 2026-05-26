@@ -164,10 +164,86 @@ resource "aws_iam_role" "codedeploy" {
   assume_role_policy = data.aws_iam_policy_document.codedeploy_assume.json
 }
 
-# Managed policy bundles all the EC2/ASG/ELB perms CodeDeploy needs.
+# Managed policy bundles the basic EC2/ELB/ASG read perms CodeDeploy needs.
 resource "aws_iam_role_policy_attachment" "codedeploy" {
   role       = aws_iam_role.codedeploy.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
+}
+
+# Blue/Green with COPY_AUTO_SCALING_GROUP needs additional ASG + EC2 write
+# perms that AWSCodeDeployRole does NOT include. Without these the deploy
+# fails with: "The IAM role ... does not give you permission to perform
+# operations in the following AWS service: AmazonAutoScaling."
+resource "aws_iam_role_policy" "codedeploy_bluegreen" {
+  name = "${local.name}-codedeploy-bluegreen"
+  role = aws_iam_role.codedeploy.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "autoscaling:CompleteLifecycleAction",
+          "autoscaling:CreateAutoScalingGroup",
+          "autoscaling:CreateOrUpdateTags",
+          "autoscaling:DeleteAutoScalingGroup",
+          "autoscaling:DeleteLifecycleHook",
+          "autoscaling:DeleteTags",
+          "autoscaling:DescribeAccountLimits",
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeAutoScalingInstances",
+          "autoscaling:DescribeLaunchConfigurations",
+          "autoscaling:DescribeLifecycleHooks",
+          "autoscaling:DescribeNotificationConfigurations",
+          "autoscaling:DescribePolicies",
+          "autoscaling:DescribeScalingActivities",
+          "autoscaling:DescribeScheduledActions",
+          "autoscaling:DetachInstances",
+          "autoscaling:EnableMetricsCollection",
+          "autoscaling:PutLifecycleHook",
+          "autoscaling:PutNotificationConfiguration",
+          "autoscaling:PutScalingPolicy",
+          "autoscaling:PutScheduledUpdateGroupAction",
+          "autoscaling:RecordLifecycleActionHeartbeat",
+          "autoscaling:ResumeProcesses",
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:SuspendProcesses",
+          "autoscaling:TerminateInstanceInAutoScalingGroup",
+          "autoscaling:UpdateAutoScalingGroup",
+          "ec2:AssociateAddress",
+          "ec2:AttachClassicLinkVpc",
+          "ec2:CreateLaunchConfiguration",
+          "ec2:CreateLaunchTemplate",
+          "ec2:CreateLaunchTemplateVersion",
+          "ec2:CreateTags",
+          "ec2:DeleteLaunchConfiguration",
+          "ec2:DeleteLaunchTemplate",
+          "ec2:DeleteLaunchTemplateVersions",
+          "ec2:DescribeAccountAttributes",
+          "ec2:DescribeImages",
+          "ec2:DescribeInstanceStatus",
+          "ec2:DescribeKeyPairs",
+          "ec2:DescribeLaunchTemplates",
+          "ec2:DescribeLaunchTemplateVersions",
+          "ec2:DescribePlacementGroups",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeSpotInstanceRequests",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeVpcClassicLink",
+          "ec2:RunInstances",
+          "ec2:TerminateInstances",
+        ]
+        Resource = "*"
+      },
+      {
+        # Pass the EC2 instance profile to the cloned green ASG.
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = aws_iam_role.ec2_instance.arn
+      },
+    ]
+  })
 }
 
 # ---------- 4. CodePipeline ----------
