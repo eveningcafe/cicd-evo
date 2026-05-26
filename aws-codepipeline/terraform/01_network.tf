@@ -58,19 +58,34 @@ resource "aws_security_group" "prod_app" {
   }
 }
 
-# Staging EC2: accept :8080 from anywhere (so CodeBuild integration tests
-# can hit it without putting CodeBuild in this VPC). Demo-friendly; not
-# what you'd do in prod.
+# CodeBuild integration-test ENI lives here (when running in VPC mode).
+# It needs no ingress; only egress so it can curl staging.
+resource "aws_security_group" "codebuild" {
+  name        = "${local.name}-codebuild"
+  description = "Outbound for the integration-test CodeBuild project"
+  vpc_id      = data.aws_vpc.main.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# Staging EC2: accept :8080 from the CodeBuild SG (integration tests run
+# inside this VPC). Subnets are private (NAT egress only) so 0.0.0.0/0
+# would not actually work — locking to CodeBuild is both correct and tighter.
 resource "aws_security_group" "staging_app" {
   name        = "${local.name}-staging-app"
-  description = "App port from anywhere for integration tests"
+  description = "App port from CodeBuild SG"
   vpc_id      = data.aws_vpc.main.id
 
   ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.codebuild.id]
   }
 
   egress {

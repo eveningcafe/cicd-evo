@@ -1,0 +1,12 @@
+region       = "ap-southeast-1"
+project_name = "cicd-evo-simple"
+
+# A PUBLIC subnet (route table → IGW) in your VPC.
+# Find one with:
+#   aws ec2 describe-route-tables --region <region> \
+#     --query 'RouteTables[?Routes[?GatewayId!=null && starts_with(GatewayId,`igw-`)]].Associations[].SubnetId'
+vpc_id    = "vpc-036b914bdf14d227e"
+subnet_id = "subnet-00cc2f1df9ce195ab"
+
+github_repo = "eveningcafe/cicd-evo"
+branch_name = "main"

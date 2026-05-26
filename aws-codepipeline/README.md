@@ -2,6 +2,112 @@
 
 Hands-on demo of an AWS-native CI/CD pipeline using **GitHub → CodeBuild → CodeDeploy → CodePipeline** on **EC2** with **Terraform** as IaC. Deploys the Flask app at `../application/src/app.py` to a staging ASG (in-place) and a production ASG behind an ALB (in-place rolling with traffic control).
 
+## System architecture
+
+### Pipeline flow
+
+```
+              ┌──────────┐  git push
+              │  GitHub  │ ─────────────┐
+              │ eveningcafe/cicd-evo    │ webhook (CodeConnections)
+              └──────────┘              ▼
+                              ┌───────────────────────┐
+                              │   CodePipeline        │  orchestrates the 6 stages
+                              │   cicd-evo            │  artifacts → S3 (versioned)
+                              └─────────┬─────────────┘
+                                        │
+   ┌─────────────┬───────────────┬──────┴────────┬──────────────────┬────────────────┐
+   ▼             ▼               ▼               ▼                  ▼                ▼
+ 1.Source     2.Build         3.Test          4.Staging       5.IntegrationTest  6.Production
+ GitHub       CodeBuild       CodeBuild       CodeDeploy       CodeBuild         ManualApproval
+ (Source)     build.yml       contract-       deploy-group     integration-       + CodeDeploy
+              pytest +        test.yml        "staging"        test.yml           deploy-group
+              package zip     pip check,      IN_PLACE         curl staging       "prod"
+                              compileall      to staging       /healthz,/        IN_PLACE w/
+                                              ASG (1x)         (in-VPC)          traffic ctrl
+                                                                                 on prod ASG
+                                                                                 (2x) behind ALB
+```
+
+### Runtime topology (after deploy)
+
+```
+   Internet
+       │
+       │ :80
+       ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ VPC vpc-036b914bdf14d227e   (172.31.0.0/16, existing default VPC)      │
+│                                                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                 ALB cicd-evo-prod  (internet-facing)            │  │
+│   │   listener :80  →  target-group "blue" :8080                    │  │
+│   │   SG: cicd-evo-alb  (ingress :80 from 0.0.0.0/0)                │  │
+│   └────────┬─────────────────────────┬──────────────────────────────┘  │
+│            │                         │                                 │
+│   ┌────────▼──────────┐    ┌─────────▼──────────┐                      │
+│   │  subnet 1a (priv) │    │  subnet 1b (priv)  │  NAT egress only     │
+│   │  172.31.64.0/20   │    │  172.31.16.0/20    │  (no ingress from    │
+│   │                   │    │                    │   internet to EC2)   │
+│   │  ┌─────────────┐  │    │  ┌──────────────┐  │                      │
+│   │  │ prod EC2    │  │    │  │ prod EC2     │  │  ASG cicd-evo-prod   │
+│   │  │ t3.micro    │  │    │  │ t3.micro     │  │  desired=2           │
+│   │  │ gunicorn    │  │    │  │ gunicorn     │  │                      │
+│   │  │ :8080       │  │    │  │ :8080        │  │  SG: prod-app        │
+│   │  │ + CD agent  │  │    │  │ + CD agent   │  │  (only ALB SG can    │
+│   │  └─────────────┘  │    │  └──────────────┘  │   hit :8080)         │
+│   │                   │    │                    │                      │
+│   │  ┌─────────────┐  │    │                    │                      │
+│   │  │ staging EC2 │  │    │                    │  ASG cicd-evo-       │
+│   │  │ t3.micro    │  │    │                    │  staging desired=1   │
+│   │  │ gunicorn    │  │    │                    │                      │
+│   │  │ :8080       │  │    │                    │  SG: staging-app     │
+│   │  │ + CD agent  │  │    │                    │  (only codebuild SG  │
+│   │  └─────────────┘  │    │                    │   can hit :8080)     │
+│   │                   │    │                    │                      │
+│   │  ┌─────────────┐  │    │  ┌──────────────┐  │  CodeBuild           │
+│   │  │ CodeBuild   │  │    │  │ CodeBuild    │  │  integration-test    │
+│   │  │ ENI (temp)  │  │    │  │ ENI (temp)   │  │  ENI created during  │
+│   │  │ SG:codebuild│  │    │  │ SG:codebuild │  │  build, deleted after│
+│   │  └─────────────┘  │    │  └──────────────┘  │                      │
+│   └───────────────────┘    └────────────────────┘                      │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+
+Out-of-VPC (region-scoped) AWS services:
+
+  ┌──────────────────┐     ┌─────────────────────┐     ┌─────────────────┐
+  │  CodePipeline    │     │ CodeBuild           │     │ CodeDeploy      │
+  │  cicd-evo        │     │ build / contract /  │     │ app: cicd-evo   │
+  │                  │     │ integration         │     │ DG: staging,    │
+  └──────────────────┘     └─────────────────────┘     │     prod        │
+                                                       └─────────────────┘
+
+  ┌──────────────────┐     ┌─────────────────────┐     ┌─────────────────┐
+  │ S3 artifacts     │     │ CodeConnections     │     │ IAM roles (5):  │
+  │ bucket (versioned│     │ "cicd-evo-github"   │     │ pipeline, build,│
+  │ + encrypted)     │     │ → eveningcafe/...   │     │ deploy, ec2,    │
+  └──────────────────┘     └─────────────────────┘     │ events          │
+                                                       └─────────────────┘
+```
+
+### Resources currently deployed (Terraform state)
+
+| Layer       | Resource                                                          | Count |
+|-------------|-------------------------------------------------------------------|-------|
+| Network     | VPC / subnets *(reused, not created)*                             | —     |
+|             | Security groups (`alb`, `prod_app`, `staging_app`, `codebuild`)   | 4     |
+| Source      | `aws_codestarconnections_connection` (GitHub)                     | 1     |
+| Pipeline    | `aws_codepipeline` (6 stages)                                     | 1     |
+| Build       | `aws_codebuild_project` × (build, contract-test, integration-test)| 3     |
+| Deploy      | `aws_codedeploy_app` + 2 deployment groups (staging, prod)        | 1 + 2 |
+| Compute     | `aws_launch_template` × (staging, prod)                           | 2     |
+|             | `aws_autoscaling_group` (staging=1 instance, prod=2 instances)    | 2     |
+|             | `aws_lb` + listener + target group "blue"                         | 1+1+1 |
+| Artifacts   | `aws_s3_bucket` + versioning + encryption + public-block          | 1     |
+| IAM         | Roles: pipeline, codebuild, codedeploy, ec2-instance, +policies   | 4     |
+| **Total**   |                                                                   | **~30** |
+
 ## Stages mapping
 
 | # | Stage          | AWS service           | What happens                                                                   |

@@ -65,6 +65,9 @@ resource "aws_codebuild_project" "contract_test" {
 }
 
 # --- Stage 5: IntegrationTest (post-staging) ---
+# Runs inside the VPC (private ENI) so it can reach staging on its private IP.
+# The subnets are private (NAT egress only) — perfect for CodeBuild's outbound
+# needs (pull image from internet via NAT) without exposing the staging app.
 resource "aws_codebuild_project" "integration_test" {
   name          = "${local.name}-integration-test"
   description   = "Stage 5: HTTP checks against deployed staging instance"
@@ -88,6 +91,12 @@ resource "aws_codebuild_project" "integration_test" {
       name  = "STAGING_PORT"
       value = "8080"
     }
+  }
+
+  vpc_config {
+    vpc_id             = data.aws_vpc.main.id
+    subnets            = var.subnet_ids
+    security_group_ids = [aws_security_group.codebuild.id]
   }
 
   source {

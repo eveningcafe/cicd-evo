@@ -42,7 +42,7 @@ resource "aws_codedeploy_deployment_group" "prod" {
   deployment_group_name = "${local.name}-prod"
   service_role_arn      = aws_iam_role.codedeploy.arn
 
-  deployment_config_name = "CodeDeployDefault.AllAtOnceInPlace"
+  deployment_config_name = "CodeDeployDefault.AllAtOnce"
 
   autoscaling_groups = [aws_autoscaling_group.prod_blue.name]
 

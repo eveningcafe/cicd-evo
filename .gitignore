@@ -15,10 +15,10 @@ application/.build/
 .vscode/
 *.swp
 
-# Terraform (aws-codepipeline demo)
-aws-codepipeline/terraform/.terraform/
-aws-codepipeline/terraform/.terraform.lock.hcl
-aws-codepipeline/terraform/*.tfstate
-aws-codepipeline/terraform/*.tfstate.*
-aws-codepipeline/terraform/terraform.tfvars
-aws-codepipeline/terraform/tfplan
+# Terraform (aws-codepipeline + aws-codepipeline-simple demos)
+**/terraform/.terraform/
+**/terraform/.terraform.lock.hcl
+**/terraform/*.tfstate
+**/terraform/*.tfstate.*
+**/terraform/terraform.tfvars
+**/terraform/tfplan

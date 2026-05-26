@@ -100,6 +100,35 @@ data "aws_iam_policy_document" "codebuild" {
     resources = ["*"]
   }
 
+  # CodeBuild needs these to run inside the VPC (manages its own ENI).
+  statement {
+    actions = [
+      "ec2:CreateNetworkInterface",
+      "ec2:DescribeDhcpOptions",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DeleteNetworkInterface",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeSecurityGroups",
+      "ec2:DescribeVpcs",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    actions   = ["ec2:CreateNetworkInterfacePermission"]
+    resources = ["arn:aws:ec2:${var.region}:${local.account_id}:network-interface/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:Subnet"
+      values   = [for id in var.subnet_ids : "arn:aws:ec2:${var.region}:${local.account_id}:subnet/${id}"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:AuthorizedService"
+      values   = ["codebuild.amazonaws.com"]
+    }
+  }
+
   # CodeBuild reports
   statement {
     actions = [

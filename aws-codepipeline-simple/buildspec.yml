@@ -1,0 +1,32 @@
+# Single CodeBuild project for the simple demo.
+# - Install pip + run pytest (unit tests)
+# - Package the Flask app + appspec + scripts into a CodeDeploy-ready zip
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - pip install --upgrade pip
+      - pip install pytest
+      - pip install -r application/src/requirements.txt
+
+  build:
+    commands:
+      - echo "=== unit tests ==="
+      - pytest application/tests -v
+
+      - echo "=== package ==="
+      - mkdir -p bundle/app bundle/scripts
+      - cp -r application/src/* bundle/app/
+      - cp aws-codepipeline-simple/appspec.yml         bundle/appspec.yml
+      - cp aws-codepipeline-simple/scripts/install.sh  bundle/scripts/install.sh
+      - cp aws-codepipeline-simple/scripts/validate.sh bundle/scripts/validate.sh
+      - chmod +x bundle/scripts/*.sh
+
+artifacts:
+  base-directory: bundle
+  files:
+    - "**/*"
+  name: bundle
