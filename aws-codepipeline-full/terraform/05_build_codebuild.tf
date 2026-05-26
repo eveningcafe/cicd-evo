@@ -95,7 +95,7 @@ resource "aws_codebuild_project" "integration_test" {
 
   vpc_config {
     vpc_id             = data.aws_vpc.main.id
-    subnets            = var.subnet_ids
+    subnets            = local.effective_codebuild_subnet_ids
     security_group_ids = [aws_security_group.codebuild.id]
   }
 

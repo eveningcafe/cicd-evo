@@ -135,8 +135,11 @@ resource "aws_codepipeline" "main" {
 
       configuration = {
         ApplicationName     = aws_codedeploy_app.main.name
-        DeploymentGroupName = aws_codedeploy_deployment_group.prod.deployment_group_name
+        DeploymentGroupName = local.prod_dg_name
       }
     }
   }
+
+  # Pipeline must come after the CLI-managed prod DG exists.
+  depends_on = [null_resource.prod_dg]
 }

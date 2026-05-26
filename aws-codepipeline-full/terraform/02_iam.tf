@@ -120,7 +120,7 @@ data "aws_iam_policy_document" "codebuild" {
     condition {
       test     = "StringEquals"
       variable = "ec2:Subnet"
-      values   = [for id in var.subnet_ids : "arn:aws:ec2:${var.region}:${local.account_id}:subnet/${id}"]
+      values   = [for id in local.effective_codebuild_subnet_ids : "arn:aws:ec2:${var.region}:${local.account_id}:subnet/${id}"]
     }
     condition {
       test     = "StringEquals"
