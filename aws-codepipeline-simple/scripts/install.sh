@@ -19,7 +19,7 @@ fi
 chown -R ec2-user:ec2-user /opt/sample-app
 
 # Start gunicorn in background, detached from CodeDeploy's session.
-sudo -u ec2-user APP_ENVIRONMENT=simple-demo APP_GREETING=hello-from-simple-demo-02 \
+sudo -u ec2-user APP_ENVIRONMENT=simple-demo APP_GREETING=hello-from-simple-demo-03 \
   nohup /opt/sample-app/venv/bin/gunicorn \
     -w 2 -b 0.0.0.0:8080 \
     --chdir /opt/sample-app/app \
